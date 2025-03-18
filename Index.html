@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Ball Hit Game</title>
+    <style>
+        #gameCanvas {
+            border: 2px solid #333;
+            background: #1a1a1a;
+            border-radius: 10px;
+        }
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        #gameInfo {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        .info-item {
+            font-size: 20px;
+            padding: 5px 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+        .button-container {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            min-width: 100px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #restartBtn {
+            background: #ff4444;
+        }
+        #restartBtn:hover {
+            background: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div id="gameInfo">
+            <span class="info-item" id="score">Score: 0</span>
+            <span class="info-item" id="lives">Lives: 3</span>
+            <span class="info-item" id="level">Level: 1</span>
+        </div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div class="button-container">
+            <button id="moveLeftBtn">Left</button>
+            <button id="moveRightBtn">Right</button>
+            <button id="restartBtn" style="display: none;">Restart Game</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const levelDisplay = document.getElementById('level');
+        const restartBtn = document.getElementById('restartBtn');
+        const moveLeftBtn = document.getElementById('moveLeftBtn');
+        const moveRightBtn = document.getElementById('moveRightBtn');
+
+        // Game state
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let gameRunning = false;
+        let balls = [];
+        let powerUps = [];
+
+        // Paddle
+        const paddle = {
+            width: 100,
+            height: 15,
+            x: canvas.width / 2 - 50,
+            y: canvas.height - 30,
+            speed: 15
+        };
+
+        // Ball constructor
+        class Ball {
+            constructor() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.radius = 10;
+                this.dx = (Math.random() - 0.5) * 8;
+                this.dy = -5;
+                this.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            }
+        }
+
+        // Power-up constructor
+        class PowerUp {
+            constructor() {
+                this.x = Math.random() * (canvas.width - 20);
+                this.y = -20;
+                this.width = 20;
+                this.height = 20;
+                this.dy = 2;
+                this.type = Math.random() > 0.5 ? 'size' : 'speed';
+            }
+        }
+
+        // Controls
+        let mouseX = paddle.x;
+        let movingLeft = false;
+        let movingRight = false;
+
+        // Mouse control
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left - paddle.width / 2;
+        });
+
+        // Keyboard control
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') movingLeft = true;
+            if (e.key === 'ArrowRight') movingRight = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') movingLeft = false;
+            if (e.key === 'ArrowRight') movingRight = false;
+        });
+
+        // Button controls
+        moveLeftBtn.addEventListener('mousedown', () => movingLeft = true);
+        moveLeftBtn.addEventListener('mouseup', () => movingLeft = false);
+        moveLeftBtn.addEventListener('touchstart', () => movingLeft = true);
+        moveLeftBtn.addEventListener('touchend', () => movingLeft = false);
+
+        moveRightBtn.addEventListener('mousedown', () => movingRight = true);
+        moveRightBtn.addEventListener('mouseup', () => movingRight = false);
+        moveRightBtn.addEventListener('touchstart', () => movingRight = true);
+        moveRightBtn.addEventListener('touchend', () => movingRight = false);
+
+        restartBtn.addEventListener('click', startGame);
+
+        // Game logic
+        function update() {
+            if (!gameRunning) return;
+
+            // Move paddle
+            paddle.x += (mouseX - paddle.x) * 0.1;
+            if (movingLeft) paddle.x -= paddle.speed;
+            if (movingRight) paddle.x += paddle.speed;
+            paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
+
+            // Update balls
+            balls.forEach((ball, index) => {
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+
+                // Wall collisions
+                if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+                    ball.dx = -ball.dx;
+                }
+                if (ball.y - ball.radius < 0) {
+                    ball.dy = -ball.dy;
+                }
+
+                // Paddle collision
+                if (ball.y + ball.radius > paddle.y && 
+                    ball.x > paddle.x && 
+                    ball.x < paddle.x + paddle.width) {
+                    ball.dy = -Math.abs(ball.dy);
+                    score += 10;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                }
+
+                // Ball lost
+                if (ball.y > canvas.height) {
+                    balls.splice(index, 1);
+                    if (balls.length === 0) {
+                        lives--;
+                        livesDisplay.textContent = `Lives: ${lives}`;
+                        if (lives > 0) spawnBall();
+                        else endGame();
+                    }
+                }
+            });
+
+            // Update power-ups
+            powerUps.forEach((powerUp, index) => {
+                powerUp.y += powerUp.dy;
+
+                // Power-up collision with paddle
+                if (powerUp.y + powerUp.height > paddle.y &&
+                    powerUp.x > paddle.x &&
+                    powerUp.x < paddle.x + paddle.width) {
+                    if (powerUp.type === 'size') paddle.width = 150;
+                    else paddle.speed = 25;
+                    setTimeout(() => {
+                        paddle.width = 100;
+                        paddle.speed = 15;
+                    }, 5000);
+                    powerUps.splice(index, 1);
+                }
+
+                if (powerUp.y > canvas.height) powerUps.splice(index, 1);
+            });
+
+            // Level progression
+            if (score > 0 && score % 100 === 0) {
+                level++;
+                levelDisplay.textContent = `Level: ${level}`;
+                spawnBall();
+            }
+
+            // Spawn power-ups
+            if (Math.random() < 0.01) powerUps.push(new PowerUp());
+        }
+
+        // Drawing
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw balls
+            balls.forEach(ball => {
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = ball.color;
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw paddle with gradient
+            const gradient = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x + paddle.width, paddle.y);
+            gradient.addColorStop(0, '#00f');
+            gradient.addColorStop(1, '#0ff');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+
+            // Draw power-ups
+            powerUps.forEach(powerUp => {
+                ctx.fillStyle = powerUp.type === 'size' ? '#ff0' : '#f0f';
+                ctx.fillRect(powerUp.x, powerUp.y, powerUp.width, powerUp.height);
+            });
+        }
+
+        // Game control
+        function spawnBall() {
+            balls.push(new Ball());
+        }
+
+        function startGame() {
+            score = 0;
+            lives = 3;
+            level = 1;
+            balls = [];
+            powerUps = [];
+            gameRunning = true;
+            restartBtn.style.display = 'none';
+            scoreDisplay.textContent = `Score: ${score}`;
+            livesDisplay.textContent = `Lives: ${lives}`;
+            levelDisplay.textContent = `Level: ${level}`;
+            spawnBall();
+            gameLoop();
+        }
+
+        function endGame() {
+            gameRunning = false;
+            restartBtn.style.display = 'block';
+        }
+
+        function gameLoop() {
+            if (gameRunning) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Start the game initially
+        startGame();
+    </script>
+</body>
+</html>
